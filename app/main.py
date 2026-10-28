@@ -1,9 +1,11 @@
-from typing import Union
+from typing import Optional, Union
 import spacy
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from fastapi.responses import Response
 from pydantic import BaseModel
 from app.bigram_model import BigramModel
 from app.cnn_classifier import CNNClassifier
+from app.gan_generator import DigitGenerator
 
 app = FastAPI()
 
@@ -12,6 +14,9 @@ nlp = spacy.load("en_core_web_md")
 
 # CNN image classifier trained on CIFAR-10 (see train_cnn.py)
 cnn_classifier = CNNClassifier()
+
+# GAN generator trained on MNIST (see train_gan.py)
+digit_generator = DigitGenerator()
 
 # Sample corpus for the bigram model
 corpus = [
@@ -72,3 +77,13 @@ async def classify_image(file: UploadFile = File(...)):
     except Exception:
         raise HTTPException(status_code=400, detail="Could not read the file as an image")
     return {"filename": file.filename, **result}
+
+
+@app.get("/generate_digits", responses={200: {"content": {"image/png": {}}}})
+def generate_digits(
+    num_images: int = Query(16, ge=1, le=64, description="How many digits to generate (1-64)"),
+    seed: Optional[int] = Query(None, description="Optional random seed, same seed gives the same images"),
+):
+    """Generate hand-written digits with the GAN. Returns a PNG grid of images."""
+    png = digit_generator.generate_png(num_images=num_images, seed=seed)
+    return Response(content=png, media_type="image/png")
